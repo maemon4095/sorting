@@ -29,5 +29,5 @@
     "forwardPorts": [
         8080
     ],
-    "postStartCommand": "npm install -g npm && npm install -g pnpm"
+    "postCreateCommand": "npm install -g pnpm"
 }
