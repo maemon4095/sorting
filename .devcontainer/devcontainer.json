@@ -29,5 +29,6 @@
     "forwardPorts": [
         8080
     ],
-    "postCreateCommand": "npm install -g pnpm"
+    "postCreateCommand": "npm install -g npm && npm install -g pnpm && apt update -y && apt upgrade -y && apt install git -y && cd .. && npx degit solidjs/templates/ts-minimal -y --force ${localWorkspaceFolderBasename} && cd ${localWorkspaceFolderBasename} && pnpm install",
+    "postStartCommand": "npm install -g npm && npm install -g pnpm"
 }
