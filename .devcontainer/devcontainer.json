@@ -1,9 +1,6 @@
 {
     "name": "${localWorkspaceFolderBasename}",
-    "build": {
-        "dockerfile": "./Dockerfile",
-        "context": "../"
-    },
+    "image": "node:slim",
     "runArgs": [
         "--workdir",
         "/${localWorkspaceFolderBasename}",
@@ -31,5 +28,6 @@
     "workspaceFolder": "/${localWorkspaceFolderBasename}",
     "forwardPorts": [
         8080
-    ]
+    ],
+    "postStartCommand": "npm install -g npm && npm install -g pnpm"
 }
