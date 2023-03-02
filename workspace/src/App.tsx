@@ -2,26 +2,42 @@ import { batch, Component, createSignal } from 'solid-js';
 import { createMutable, createStore } from 'solid-js/store';
 
 import BarGraph, { Coloring } from './bargraph';
+import { Color } from './color';
 const App: Component = () => {
   const data = createMutable(createSequential(40));
   const [coloring, setColoring] = createSignal<Coloring>({ default: `rgb(0, 0, 0)` });
-  const execute = async (data: number[], sorter: (data: number[]) => Iterator<{ type: String, left: number, right: number; }>) => {
-    const iter = sorter(data);
+  const execute = async (data: number[], sorter: (suite: ISortSuite) => Promise<void>) => {
+    const swapColor: Color = 'rgb(50, 0, 0)';
+    const compareColor: Color = 'rgb(0, 50, 0)';
+    const defaultColor: Color = 'rgb(0, 0, 0)';
+    const suite: ISortSuite = {
+      buffers: [{
+        data,
+        operations: {
+          async swap(i, j) {
+            setColoring({ [i]: swapColor, [j]: swapColor, default: defaultColor });
+            await wait(50);
+            const tmp = data[i];
+            data[i] = data[j];
+            data[j] = tmp;
+            await wait(50);
+          },
+          async compare(i, j) {
+            setColoring({ [i]: compareColor, [j]: compareColor, default: defaultColor });
+            await wait(100);
+            return Math.sign(data[i] - data[j]);
+          },
+          async write(i, value) {
+            setColoring({ [i]: swapColor, default: defaultColor });
+            data[i] = value;
+          },
+        }
+      }],
+      async createBuffer(size: number) { }
+    };
 
-    let next = iter.next();
-    while (!next.done) {
-      const op = next.value;
 
-      setColoring({ [op.left]: `rgb(0, 50, 0)`, [op.right]: `rgb(0, 50, 0)`, default: `rgb(0, 0, 0)` });
-      await wait(50);
-      const tmp = data[op.left];
-      data[op.left] = data[op.right];
-      data[op.right] = tmp;
-
-      await wait(50);
-      console.log(op);
-      next = iter.next();
-    }
+    await sorter(suite);
   };
 
   setTimeout(async () => {
@@ -56,24 +72,15 @@ function createSequential(length: number) {
   return [...seq(length)];
 }
 
-function* fisherYates(arr: number[]) {
-  for (let i = arr.length - 1; i > 0; --i) {
-    const j = Math.floor(Math.random() * (i + 1));
-    yield swap(i, j);
-  }
-}
+async function bubble(suite: ISortSuite) {
+  const [primary] = suite.buffers;
 
-function swap(i: number, j: number) {
-  return { type: 'swap', left: i, right: j };
-}
-
-function* bubble(arr: number[]) {
-  for (let j = arr.length - 1; j > 1; --j) {
+  for (let j = primary.data.length - 1; j > 1; --j) {
     for (let i = 0; i < j; ++i) {
-      if (arr[i] <= arr[i + 1]) {
+      if (await primary.operations.compare(i, i + 1) <= 0) {
         continue;
       }
-      yield swap(i, i + 1);
+      await primary.operations.swap(i, i + 1);
     }
   }
 }
@@ -82,6 +89,18 @@ async function wait(milliseconds: number) {
   return new Promise<void>(resolve => {
     setTimeout(() => resolve(), milliseconds);
   });
+}
+
+interface IBufferSuite { data: readonly number[]; operations: { compare: (i: number, j: number) => Promise<number>, swap: (i: number, j: number) => Promise<void>; write: (i: number, value: number) => void; }; };
+interface ISortSuite { buffers: IBufferSuite[]; createBuffer(size: number): Promise<void>; };
+
+async function fisherYates(suite: ISortSuite) {
+  const [primary,] = suite.buffers;
+
+  for (let i = primary.data.length - 1; i > 0; --i) {
+    const j = Math.floor(Math.random() * (i + 1));
+    await primary.operations.swap(i, j);
+  }
 }
 
 export default App;
