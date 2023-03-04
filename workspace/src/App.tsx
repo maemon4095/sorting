@@ -3,52 +3,64 @@ import { createMutable, createStore } from 'solid-js/store';
 
 import BarGraph, { Coloring } from './bargraph';
 import { Color } from './color';
+import { ISortingContext, ISortingBufferFactory, ISortingBuffer, SortingContext } from './sorter';
 const App: Component = () => {
   const data = createMutable(createSequential(40));
-  const [coloring, setColoring] = createSignal<Coloring>({ default: `rgb(0, 0, 0)` });
-  const execute = async (data: number[], sorter: (suite: ISortSuite) => Promise<void>) => {
-    const swapColor: Color = 'rgb(50, 0, 0)';
-    const compareColor: Color = 'rgb(0, 50, 0)';
-    const defaultColor: Color = 'rgb(0, 0, 0)';
-    const suite: ISortSuite = {
-      buffers: [{
-        data,
-        operations: {
-          async swap(i, j) {
-            setColoring({ [i]: swapColor, [j]: swapColor, default: defaultColor });
-            await wait(50);
-            const tmp = data[i];
-            data[i] = data[j];
-            data[j] = tmp;
-            await wait(50);
-          },
-          async compare(i, j) {
-            setColoring({ [i]: compareColor, [j]: compareColor, default: defaultColor });
-            await wait(100);
-            return Math.sign(data[i] - data[j]);
-          },
-          async write(i, value) {
-            setColoring({ [i]: swapColor, default: defaultColor });
-            data[i] = value;
-          },
-        }
-      }],
-      async createBuffer(size: number) { }
-    };
+  const defaultColoring: Coloring = { default: `rgb(255, 255, 255)`, background: `rgb(0, 0, 0)` };
+  const [coloring, setColoring] = createSignal<Coloring>(defaultColoring);
 
+  const accessColor: Color = `rgb(0, 255, 0)`;
+  const accessDelay = 20;
+  const writeColor: Color = `rgb(255, 0, 0)`;
+  const writeDelay = 10;
 
-    await sorter(suite);
+  const primaryBuffer: ISortingBuffer = {
+    get length() {
+      return data.length;
+    },
+    async get(idx) {
+      setColoring({ [idx]: accessColor, ...defaultColoring });
+      await wait(accessDelay);
+      return data[idx];
+    },
+    async set(idx, value) {
+      setColoring({ [idx]: writeColor, ...defaultColoring });
+      await wait(writeDelay);
+      data[idx] = value;
+      await wait(writeDelay);
+    },
+    async swap(i, j) {
+      setColoring({ [i]: writeColor, [j]: writeColor, ...defaultColoring });
+      await wait(writeDelay);
+      const tmp = data[i];
+      data[i] = data[j];
+      data[j] = tmp;
+      await wait(writeDelay);
+    },
+    async compare(i, j) {
+      setColoring({ [i]: accessColor, [j]: accessColor, ...defaultColoring });
+      await wait(accessDelay);
+      return Math.sign(data[i] - data[j]);
+    }
   };
+
+  const factory: ISortingBufferFactory = {
+    async create(size) {
+      throw 'not supported';
+    },
+  };
+
+  const context: ISortingContext = new SortingContext(primaryBuffer, factory);
 
   setTimeout(async () => {
     while (true) {
-      console.log('start');
-      await execute(data, fisherYates);
-      console.log('done');
-      await wait(500);
-      console.log('bubble');
-      await execute(data, bubble);
-
+      console.log('start shuffling');
+      await fisherYates(context);
+      console.log('end   shuffling');
+      await wait(100);
+      console.log('start sorting');
+      await insert(context);
+      console.log('end   sorting');
       await wait(100);
     }
   }, 0);
@@ -72,15 +84,28 @@ function createSequential(length: number) {
   return [...seq(length)];
 }
 
-async function bubble(suite: ISortSuite) {
-  const [primary] = suite.buffers;
+async function bubble(context: ISortingContext) {
+  const [primary] = context.buffers;
 
-  for (let j = primary.data.length - 1; j > 1; --j) {
+  for (let j = primary.length - 1; j > 1; --j) {
     for (let i = 0; i < j; ++i) {
-      if (await primary.operations.compare(i, i + 1) <= 0) {
+      if (await primary.compare(i, i + 1) <= 0) {
         continue;
       }
-      await primary.operations.swap(i, i + 1);
+      await primary.swap(i, i + 1);
+    }
+  }
+}
+
+async function insert(context: ISortingContext) {
+  const [primary] = context.buffers;
+
+  for (let j = 1; j < primary.length; ++j) {
+    for (let i = j; i >= 1; --i) {
+      if (await primary.compare(i - 1, i) <= 0) {
+        break;
+      }
+      await primary.swap(i - 1, i);
     }
   }
 }
@@ -91,17 +116,13 @@ async function wait(milliseconds: number) {
   });
 }
 
-interface IBufferSuite { data: readonly number[]; operations: { compare: (i: number, j: number) => Promise<number>, swap: (i: number, j: number) => Promise<void>; write: (i: number, value: number) => void; }; };
-interface ISortSuite { buffers: IBufferSuite[]; createBuffer(size: number): Promise<void>; };
+async function fisherYates(context: ISortingContext) {
+  const [primary,] = context.buffers;
 
-async function fisherYates(suite: ISortSuite) {
-  const [primary,] = suite.buffers;
-
-  for (let i = primary.data.length - 1; i > 0; --i) {
+  for (let i = primary.length - 1; i > 0; --i) {
     const j = Math.floor(Math.random() * (i + 1));
-    await primary.operations.swap(i, j);
+    await primary.swap(i, j);
   }
 }
 
 export default App;
-//TODO: async/await based sorter

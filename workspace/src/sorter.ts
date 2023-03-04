@@ -1,60 +1,30 @@
-export interface IBufferSuite { data: readonly number[]; operations: { compare: (i: number, j: number) => Promise<number>, swap: (i: number, j: number) => Promise<void>; write: (i: number, value: number) => void; }; };
-export interface ISortingContext { buffers: readonly IBufferSuite[]; createBuffer(size: number): Promise<void>; };
+export interface ISortingBuffer {
+    get length(): number;
+    get(i: number): Promise<number>;
+    set: (i: number, value: number) => void;
+    compare: (i: number, j: number) => Promise<number>,
+    swap: (i: number, j: number) => Promise<void>;
+};
+export interface ISortingContext { buffers: readonly ISortingBuffer[]; createBuffer(size: number): Promise<void>; };
+export interface ISortingBufferFactory {
+    create(size: number): Promise<ISortingBuffer>;
+}
 
 export class SortingContext implements ISortingContext {
-    #buffers: IBufferSuite[];
+    #buffers: ISortingBuffer[];
+    #provider: ISortingBufferFactory;
 
-    constructor(primaryBuffer: IBufferSuite) {
+    constructor(primaryBuffer: ISortingBuffer, provider: ISortingBufferFactory) {
         this.#buffers = [primaryBuffer];
+        this.#provider = provider;
     }
 
     get buffers() {
         return this.#buffers;
     }
     async createBuffer(size: number): Promise<void> {
-        this.buffers.push();
+        const buf = await this.#provider.create(size);
+        this.#buffers.push(buf);
     }
 }
-
-type ParamOf<T> = T extends (...args: infer X) => any ? X : never;
-
-export type BufferOperationHooks = {
-    [key in keyof IBufferSuite['operations']as `before${Capitalize<key>}`]?: (...args: ParamOf<IBufferSuite['operations'][key]>) => Promise<void>;
-} & {
-        [key in keyof IBufferSuite['operations']as `after${Capitalize<key>}`]?: (...args: ParamOf<IBufferSuite['operations'][key]>) => Promise<void>;
-    };
-
-export class BufferSuite implements IBufferSuite {
-    #hooks: BufferOperationHooks;
-    #data: number[];
-    #operations: IBufferSuite['operations'] = {
-        swap: async (i, j) => {
-            await this.#hooks.beforeSwap?.(i, j);
-            this.#data[i];
-            await this.#hooks.afterSwap?.(i, j);
-        },
-        compare: async (i, j) => {
-            await this.#hooks.beforeCompare?.(i, j);
-            const ret = Math.sign(this.#data[i] - this.#data[j]);
-            await this.#hooks.afterCompare?.(i, j);
-            return ret;
-        },
-        write: async (i, value) => {
-            await this.#hooks.beforeWrite?.(i, value);
-            this.#data[i] = value;
-            await this.#hooks.afterWrite?.(i, value);
-        }
-    };
-
-    constructor(data: readonly number[], hooks?: BufferOperationHooks) {
-        this.#data = [...data];
-        this.#hooks = hooks ?? {};
-    }
-
-    get data() {
-        return this.#data;
-    }
-    get operations() {
-        return this.#operations;
-    };
-}
+// Parallel Sortをどうするか．
